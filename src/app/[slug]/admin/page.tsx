@@ -26,7 +26,32 @@ interface Destination {
   country: string;
   flag: string;
   category: string;
+  attrs?: Record<string, number>;
 }
+
+// Admin-specific filter constants
+const ADMIN_EXPERIENCE_TYPES = [
+  { id: "beach", label: "Praia", emoji: "🏖️", attrKey: "beach", threshold: 0.7 },
+  { id: "night", label: "Vida Noturna", emoji: "🎉", attrKey: "night", threshold: 0.7 },
+  { id: "nature", label: "Natureza", emoji: "🏔️", attrKey: "nature", threshold: 0.7 },
+  { id: "culture", label: "Cultura", emoji: "🏛️", attrKey: "culture", threshold: 0.7 },
+  { id: "food", label: "Gastronomia", emoji: "🍽️", attrKey: "food", threshold: 0.7 },
+];
+
+const ADMIN_BUDGET_OPTIONS = [
+  { id: "budget", label: "Económico", emoji: "💰" },
+  { id: "mid", label: "Médio", emoji: "💵" },
+  { id: "premium", label: "Premium", emoji: "💎" },
+  { id: "any", label: "Qualquer", emoji: "🌍" },
+];
+
+const ADMIN_REGIONS = [
+  { id: "portugal", label: "Portugal", countries: ["Portugal"] },
+  { id: "spain", label: "Espanha", countries: ["Espanha", "Spain"] },
+  { id: "italy", label: "Itália", countries: ["Itália", "Italy"] },
+  { id: "france", label: "França", countries: ["França", "France"] },
+  { id: "greece", label: "Grécia", countries: ["Grécia", "Greece"] },
+];
 
 interface Factor {
   id: string;
@@ -74,6 +99,14 @@ export default function GroupAdminPage({ params }: { params: Promise<{ slug: str
   const [searchDest, setSearchDest] = useState("");
   const [newMemberName, setNewMemberName] = useState("");
   const [editingMember, setEditingMember] = useState<Member | null>(null);
+
+  // Admin filter state
+  const [adminFilters, setAdminFilters] = useState({
+    experienceTypes: [] as string[],
+    budget: "any",
+    regions: [] as string[],
+  });
+  const [showAdminFilters, setShowAdminFilters] = useState(false);
 
   const headers = useCallback(() => ({ "x-admin-password": password }), [password]);
 
@@ -218,13 +251,78 @@ export default function GroupAdminPage({ params }: { params: Promise<{ slug: str
     setEditingMember(null);
   };
 
-  // Filter destinations
-  const filteredDestinations = catalog.destinations.filter(
-    (d) =>
+  // Filter destinations with search and admin filters
+  const filteredDestinations = catalog.destinations.filter((d) => {
+    // Text search
+    const matchesSearch =
       d.name.toLowerCase().includes(searchDest.toLowerCase()) ||
       d.country.toLowerCase().includes(searchDest.toLowerCase()) ||
-      d.category.toLowerCase().includes(searchDest.toLowerCase())
-  );
+      d.category.toLowerCase().includes(searchDest.toLowerCase());
+    if (!matchesSearch) return false;
+
+    // Experience type filter
+    if (adminFilters.experienceTypes.length > 0 && d.attrs) {
+      const matchesExperience = adminFilters.experienceTypes.some((typeId) => {
+        const type = ADMIN_EXPERIENCE_TYPES.find((t) => t.id === typeId);
+        if (!type) return false;
+        const attrValue = d.attrs?.[type.attrKey] || 0;
+        return attrValue >= type.threshold;
+      });
+      if (!matchesExperience) return false;
+    }
+
+    // Budget filter
+    if (adminFilters.budget !== "any" && d.attrs) {
+      const budgetValue = d.attrs["budget"] || 0.5;
+      switch (adminFilters.budget) {
+        case "budget":
+          if (budgetValue < 0.7) return false;
+          break;
+        case "mid":
+          if (budgetValue < 0.4 || budgetValue >= 0.7) return false;
+          break;
+        case "premium":
+          if (budgetValue >= 0.4) return false;
+          break;
+      }
+    }
+
+    // Region filter
+    if (adminFilters.regions.length > 0) {
+      const matchesRegion = adminFilters.regions.some((regionId) => {
+        const region = ADMIN_REGIONS.find((r) => r.id === regionId);
+        if (!region) return false;
+        return region.countries.some((country) =>
+          d.country.toLowerCase().includes(country.toLowerCase())
+        );
+      });
+      if (!matchesRegion) return false;
+    }
+
+    return true;
+  });
+
+  // Quick select functions for admin
+  const selectAllBeach = () => {
+    const beachDests = catalog.destinations.filter((d) => d.attrs && d.attrs["beach"] >= 0.7);
+    const newDests = Array.from(new Set([...selections.destinations, ...beachDests.map((d) => d.id)]));
+    setSelections((prev) => ({ ...prev, destinations: newDests }));
+  };
+
+  const selectAllBudget = () => {
+    const budgetDests = catalog.destinations.filter((d) => d.attrs && d.attrs["budget"] >= 0.7);
+    const newDests = Array.from(new Set([...selections.destinations, ...budgetDests.map((d) => d.id)]));
+    setSelections((prev) => ({ ...prev, destinations: newDests }));
+  };
+
+  const clearAdminFilters = () => {
+    setAdminFilters({ experienceTypes: [], budget: "any", regions: [] });
+  };
+
+  const hasActiveAdminFilters =
+    adminFilters.experienceTypes.length > 0 ||
+    adminFilters.budget !== "any" ||
+    adminFilters.regions.length > 0;
 
   // Group destinations by category
   const destByCategory = filteredDestinations.reduce((acc, d) => {
@@ -417,6 +515,139 @@ export default function GroupAdminPage({ params }: { params: Promise<{ slug: str
               </span>
             </div>
 
+            {/* Admin Filters Panel */}
+            <div className="bg-slate-800/60 border border-slate-700/30 rounded-2xl overflow-hidden">
+              <button
+                onClick={() => setShowAdminFilters(!showAdminFilters)}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span>🔍</span>
+                  <span className="font-semibold">Filtros Avançados</span>
+                  {hasActiveAdminFilters && (
+                    <span className="bg-orange-500/20 text-orange-400 text-xs px-2 py-0.5 rounded-full">
+                      Ativos
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-slate-400">
+                    {filteredDestinations.length} de {catalog.destinations.length}
+                  </span>
+                  <span className={`transition-transform ${showAdminFilters ? "rotate-180" : ""}`}>▼</span>
+                </div>
+              </button>
+
+              {showAdminFilters && (
+                <div className="px-4 pb-4 space-y-4 border-t border-slate-700/30 pt-4">
+                  {/* Quick Select Buttons */}
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={selectAllBeach}
+                      className="px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 text-sm hover:bg-blue-600/30"
+                    >
+                      🏖️ Selecionar Praias
+                    </button>
+                    <button
+                      onClick={selectAllBudget}
+                      className="px-3 py-1.5 rounded-lg bg-green-600/20 text-green-400 text-sm hover:bg-green-600/30"
+                    >
+                      💰 Selecionar Económicos
+                    </button>
+                  </div>
+
+                  {/* Experience Types */}
+                  <div>
+                    <p className="text-sm text-slate-400 mb-2">Tipo de Experiência</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ADMIN_EXPERIENCE_TYPES.map((type) => {
+                        const isActive = adminFilters.experienceTypes.includes(type.id);
+                        return (
+                          <button
+                            key={type.id}
+                            onClick={() => {
+                              const newTypes = isActive
+                                ? adminFilters.experienceTypes.filter((t) => t !== type.id)
+                                : [...adminFilters.experienceTypes, type.id];
+                              setAdminFilters((prev) => ({ ...prev, experienceTypes: newTypes }));
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-sm transition-all ${
+                              isActive
+                                ? "bg-orange-500/20 ring-1 ring-orange-500/50 text-orange-300"
+                                : "bg-slate-700/50 text-slate-300 hover:bg-slate-700"
+                            }`}
+                          >
+                            {type.emoji} {type.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Budget */}
+                  <div>
+                    <p className="text-sm text-slate-400 mb-2">Orçamento</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ADMIN_BUDGET_OPTIONS.map((opt) => {
+                        const isActive = adminFilters.budget === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            onClick={() => setAdminFilters((prev) => ({ ...prev, budget: opt.id }))}
+                            className={`px-3 py-1.5 rounded-xl text-sm transition-all ${
+                              isActive
+                                ? "bg-orange-500/20 ring-1 ring-orange-500/50 text-orange-300"
+                                : "bg-slate-700/50 text-slate-300 hover:bg-slate-700"
+                            }`}
+                          >
+                            {opt.emoji} {opt.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Regions */}
+                  <div>
+                    <p className="text-sm text-slate-400 mb-2">Região</p>
+                    <div className="flex flex-wrap gap-2">
+                      {ADMIN_REGIONS.map((region) => {
+                        const isActive = adminFilters.regions.includes(region.id);
+                        return (
+                          <button
+                            key={region.id}
+                            onClick={() => {
+                              const newRegions = isActive
+                                ? adminFilters.regions.filter((r) => r !== region.id)
+                                : [...adminFilters.regions, region.id];
+                              setAdminFilters((prev) => ({ ...prev, regions: newRegions }));
+                            }}
+                            className={`px-3 py-1.5 rounded-xl text-sm transition-all ${
+                              isActive
+                                ? "bg-orange-500/20 ring-1 ring-orange-500/50 text-orange-300"
+                                : "bg-slate-700/50 text-slate-300 hover:bg-slate-700"
+                            }`}
+                          >
+                            {region.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Clear Filters */}
+                  {hasActiveAdminFilters && (
+                    <button
+                      onClick={clearAdminFilters}
+                      className="w-full py-2 rounded-xl bg-slate-700/50 text-slate-300 text-sm hover:bg-slate-700"
+                    >
+                      Limpar todos os filtros
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={() => setSelections((prev) => ({ ...prev, destinations: catalog.destinations.map((d) => d.id) }))}
@@ -429,6 +660,16 @@ export default function GroupAdminPage({ params }: { params: Promise<{ slug: str
                 className="px-3 py-1.5 rounded-lg bg-slate-700 text-sm text-slate-300 hover:bg-slate-600"
               >
                 Limpar Todos
+              </button>
+              <button
+                onClick={() => {
+                  const filteredIds = filteredDestinations.map((d) => d.id);
+                  const newDests = Array.from(new Set([...selections.destinations, ...filteredIds]));
+                  setSelections((prev) => ({ ...prev, destinations: newDests }));
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-700/50 text-sm text-emerald-300 hover:bg-emerald-700/70"
+              >
+                Selecionar Filtrados ({filteredDestinations.length})
               </button>
             </div>
 

@@ -11,6 +11,10 @@ import {
   dayOfWeek, dayNum, monthLabel, calcScore, bestWindows,
 } from "@/lib/helpers";
 import type { Group, Member, Origin, Destination, QuizQuestion, Factor, AppData } from "@/lib/types";
+import DestinationFilters, { FilterState, DEFAULT_FILTERS, applyFilters } from "./DestinationFilters";
+import CompareDestinations from "./CompareDestinations";
+import CostBenefitPanel from "./CostBenefitPanel";
+import BookingLinks from "./BookingLinks";
 
 const AVATARS = ["🎯","🔥","⚡","🎸","🏄","🎮","🍺","🦈","🐉","🎪","🚀","🌊","🎭","🏆","🎲","🌴","🦁","🐺","🎵","🍕"];
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -365,6 +369,9 @@ function Wizard({ memberId, members, allData, appData, calDates, onSave, onBack 
 
 function Dashboard({ group, members, allData, appData, calDates, onBack }: { group: Group; members: Member[]; allData: Record<string, any>; appData: AppData; calDates: string[]; onBack: () => void }) {
   const [tab, setTab] = useState("who"); const [nights, setNights] = useState(4);
+  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
   const { destinations, factors, origins } = appData;
   const uData = members.map((m) => ({ ...m, d: allData[m.id] || {} }));
 
@@ -373,9 +380,22 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
     return destinations.map((dest) => {
       const scores = wd.map((u) => calcScore(u.d, dest, factors));
       const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-      return { ...dest, gs: avg };
+      // Calculate consensus (agreement percentage)
+      let consensus = 100;
+      if (scores.length > 1) {
+        const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
+        const variance = scores.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / scores.length;
+        const stdDev = Math.sqrt(variance);
+        consensus = Math.max(0, Math.round(100 - (stdDev / 10) * 100));
+      }
+      return { ...dest, gs: avg, consensus };
     }).sort((a, b) => b.gs - a.gs);
   }, [allData, destinations, factors]);
+
+  // Apply filters to destination scores
+  const filteredDestScores = useMemo(() => {
+    return applyFilters(destScores, filters).sort((a: any, b: any) => b.gs - a.gs);
+  }, [destScores, filters]);
 
   const dateSc = useMemo(() => calDates.map((date) => {
     let av = 0, te = 0;
@@ -385,6 +405,20 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
 
   const bw = useMemo(() => bestWindows(allData, calDates, nights), [allData, calDates, nights]);
   const tabs = [{ id: "who", l: "👥 Quem" }, { id: "when", l: "📅 Quando" }, { id: "where", l: "📍 Onde" }, { id: "money", l: "💰 Quanto" }];
+
+  // Toggle compare selection
+  const toggleCompare = (destId: string) => {
+    setCompareIds((prev) => {
+      if (prev.includes(destId)) return prev.filter((id) => id !== destId);
+      if (prev.length >= 4) return prev;
+      return [...prev, destId];
+    });
+  };
+
+  // Get destinations for comparison
+  const compareDestinations = useMemo(() => {
+    return compareIds.map((id) => destScores.find((d) => d.id === id)).filter(Boolean) as (Destination & { gs: number })[];
+  }, [compareIds, destScores]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
@@ -438,19 +472,94 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
 
         {tab === "where" && (
           <div className="space-y-3 animate-fade-in">
-            {destScores[0]?.gs > 0 ? destScores.slice(0, 10).map((dest, i) => {
-              const mx = destScores[0]?.gs || 1; const pct = (dest.gs / mx) * 100;
+            {/* Destination Filters */}
+            <DestinationFilters
+              filters={filters}
+              onChange={setFilters}
+              destinations={destinations}
+              filteredCount={filteredDestScores.length}
+            />
+
+            {/* Compare Button */}
+            {compareIds.length >= 2 && (
+              <button
+                onClick={() => setShowCompare(true)}
+                className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                📊 Comparar {compareIds.length} destinos
+              </button>
+            )}
+
+            {/* Booking Links for top destination */}
+            {filteredDestScores[0]?.gs > 0 && (
+              <BookingLinks
+                destination={filteredDestScores[0] as any}
+                secondDestination={filteredDestScores[1] as any}
+                origins={origins}
+                calStart={group.cal_start}
+                calEnd={group.cal_end}
+                memberCount={members.length}
+              />
+            )}
+
+            {/* Cost-Benefit Panel */}
+            {filteredDestScores[0]?.gs > 0 && (
+              <CostBenefitPanel
+                destinations={filteredDestScores.slice(0, 3) as any}
+                factors={factors}
+                members={members}
+                allData={allData}
+                origins={origins}
+                nights={nights}
+              />
+            )}
+
+            {filteredDestScores[0]?.gs > 0 ? filteredDestScores.slice(0, 10).map((dest: any, i: number) => {
+              const mx = filteredDestScores[0]?.gs || 1; const pct = (dest.gs / mx) * 100;
               const topA = Object.entries(dest.attrs).sort(([,a],[,b]) => (b as number) - (a as number)).slice(0, 3).map(([k]) => factors.find((f) => f.attr_key === k)).filter(Boolean).map((f) => `${f!.emoji} ${f!.name}`).join(" · ");
-              return (<div key={dest.id} className={`bg-slate-800/60 border border-slate-700/30 rounded-2xl overflow-hidden ${i === 0 ? "ring-2 ring-orange-500/30" : ""}`}>
+              const isSelected = compareIds.includes(dest.id);
+              return (<div key={dest.id} className={`bg-slate-800/60 border border-slate-700/30 rounded-2xl overflow-hidden ${i === 0 ? "ring-2 ring-orange-500/30" : ""} ${isSelected ? "ring-2 ring-blue-500/50" : ""}`}>
                 {dest.image_url && <img src={dest.image_url} alt="" className="w-full h-32 object-cover" />}
-                <div className="p-4"><div className="flex items-center gap-3 mb-2"><span className="text-lg font-extrabold text-orange-400 w-8">#{i+1}</span><span className="text-xl">{dest.flag}</span>
-                  <div className="flex-1 min-w-0"><p className="font-bold truncate">{dest.name}</p><p className="text-xs text-slate-400">{dest.country} · {dest.category}</p></div>
-                  <span className="text-lg font-bold text-orange-400">{dest.gs.toFixed(1)}</span></div>
+                <div className="p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    {/* Compare Checkbox */}
+                    <button
+                      onClick={() => toggleCompare(dest.id)}
+                      className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? "bg-blue-500 border-blue-500 text-white" : "border-slate-600 hover:border-blue-400"}`}
+                    >
+                      {isSelected && "✓"}
+                    </button>
+                    <span className="text-lg font-extrabold text-orange-400 w-8">#{i+1}</span><span className="text-xl">{dest.flag}</span>
+                    <div className="flex-1 min-w-0"><p className="font-bold truncate">{dest.name}</p><p className="text-xs text-slate-400">{dest.country} · {dest.category}</p></div>
+                    <span className="text-lg font-bold text-orange-400">{dest.gs.toFixed(1)}</span>
+                  </div>
+                  {/* Consensus Badge */}
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${dest.consensus >= 80 ? "bg-emerald-500/20 text-emerald-400" : dest.consensus >= 50 ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"}`}>
+                      🤝 {dest.consensus}% consenso
+                      {dest.consensus >= 80 && " ✅"}
+                      {dest.consensus < 50 && " ⚠️"}
+                    </span>
+                  </div>
                   <div className="h-2 bg-slate-700 rounded-full mb-2"><div className="h-full bg-gradient-to-r from-orange-500 to-pink-500 rounded-full" style={{ width: `${pct}%` }} /></div>
-                  <p className="text-xs text-slate-400">{topA}</p><p className="text-xs text-slate-500 mt-1">🌡️ {dest.temp_may}°C · {dest.description}</p></div>
+                  <p className="text-xs text-slate-400">{topA}</p><p className="text-xs text-slate-500 mt-1">🌡️ {dest.temp_may}°C · {dest.description}</p>
+                </div>
               </div>); })
             : <p className="text-slate-500 text-center py-8">Completa o quiz e prioridades para ver resultados.</p>}
           </div>
+        )}
+
+        {/* Compare Modal */}
+        {showCompare && compareDestinations.length >= 2 && (
+          <CompareDestinations
+            destinations={compareDestinations}
+            factors={factors}
+            members={members}
+            allData={allData}
+            origins={origins}
+            nights={nights}
+            onClose={() => setShowCompare(false)}
+          />
         )}
 
         {tab === "money" && (
