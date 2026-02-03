@@ -15,6 +15,7 @@ import DestinationFilters, { FilterState, DEFAULT_FILTERS, applyFilters } from "
 import CompareDestinations from "./CompareDestinations";
 import CostBenefitPanel from "./CostBenefitPanel";
 import BookingLinks from "./BookingLinks";
+import { getBookingUrls, getAirportCode, getCityNameEn } from "@/lib/affiliateLinks";
 
 const AVATARS = ["🎯","🔥","⚡","🎸","🏄","🎮","🍺","🦈","🐉","🎪","🚀","🌊","🎭","🏆","🎲","🌴","🦁","🐺","🎵","🍕"];
 const DAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -613,29 +614,52 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
               <>
                 {/* Winner Card */}
                 {filteredDestScores[0]?.gs > 0 && (
-                  <button
-                    onClick={() => setSelectedDest({ dest: filteredDestScores[0], rank: 1 })}
-                    className="w-full bg-gradient-to-r from-orange-500/20 to-pink-500/20 border border-orange-500/30 rounded-2xl overflow-hidden text-left hover:from-orange-500/30 hover:to-pink-500/30 transition-all"
-                  >
-                    <div className="relative h-32">
-                      {filteredDestScores[0].image_url ? (
-                        <img src={filteredDestScores[0].image_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-slate-800 flex items-center justify-center text-5xl">{filteredDestScores[0].flag}</div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                      <div className="absolute top-3 left-3 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-lg">🏆 #1</div>
-                      <div className="absolute bottom-3 left-3 right-3">
-                        <h3 className="text-xl font-bold text-white">{filteredDestScores[0].flag} {filteredDestScores[0].name}</h3>
-                        <div className="flex items-center gap-3 mt-1">
-                          <span className="text-orange-400 font-bold">{filteredDestScores[0].gs.toFixed(1)} pts</span>
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${filteredDestScores[0].consensus >= 80 ? "bg-emerald-500/30 text-emerald-300" : filteredDestScores[0].consensus >= 50 ? "bg-amber-500/30 text-amber-300" : "bg-red-500/30 text-red-300"}`}>
-                            {filteredDestScores[0].consensus}% consenso
-                          </span>
+                  <div className="bg-gradient-to-r from-orange-500/20 to-pink-500/20 border border-orange-500/30 rounded-2xl overflow-hidden">
+                    <button
+                      onClick={() => setSelectedDest({ dest: filteredDestScores[0], rank: 1 })}
+                      className="w-full text-left hover:from-orange-500/30 hover:to-pink-500/30 transition-all"
+                    >
+                      <div className="relative h-32">
+                        {filteredDestScores[0].image_url ? (
+                          <img src={filteredDestScores[0].image_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full bg-slate-800 flex items-center justify-center text-5xl">{filteredDestScores[0].flag}</div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                        <div className="absolute top-3 left-3 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-lg">🏆 #1</div>
+                        <div className="absolute bottom-3 left-3 right-3">
+                          <h3 className="text-xl font-bold text-white">{filteredDestScores[0].flag} {filteredDestScores[0].name}</h3>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-orange-400 font-bold">{filteredDestScores[0].gs.toFixed(1)} pts</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${filteredDestScores[0].consensus >= 80 ? "bg-emerald-500/30 text-emerald-300" : filteredDestScores[0].consensus >= 50 ? "bg-amber-500/30 text-amber-300" : "bg-red-500/30 text-red-300"}`}>
+                              {filteredDestScores[0].consensus}% consenso
+                            </span>
+                          </div>
                         </div>
                       </div>
+                    </button>
+                    {/* Quick Booking Actions */}
+                    <div className="p-3 bg-black/20 flex gap-2">
+                      <a
+                        href={getBookingUrls(filteredDestScores[0].name, "Lisboa", group.cal_start, group.cal_end, members.length).hotels}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 rounded-xl bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold text-center transition-all"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        🏨 Ver Hotéis
+                      </a>
+                      <a
+                        href={getBookingUrls(filteredDestScores[0].name, "Lisboa", group.cal_start, group.cal_end, members.length).flights || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-3 rounded-xl bg-blue-500 hover:bg-blue-400 text-white text-sm font-semibold text-center transition-all"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        ✈️ Ver Voos
+                      </a>
                     </div>
-                  </button>
+                  </div>
                 )}
 
                 {/* Rest of Rankings */}
@@ -735,6 +759,44 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
                     nights={nights}
                   />
                 )}
+
+                {/* Ready to Book Section */}
+                {filteredDestScores[0]?.gs > 0 && (
+                  <div className="bg-gradient-to-r from-emerald-900/30 to-teal-900/30 border border-emerald-700/30 rounded-2xl p-4">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <span>🎫</span> Pronto para reservar?
+                    </h3>
+                    <p className="text-sm text-slate-400 mb-4">
+                      O vosso destino favorito é <span className="text-emerald-400 font-semibold">{filteredDestScores[0].name}</span>. Começa a planear!
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      <a
+                        href={getBookingUrls(filteredDestScores[0].name, "Lisboa", group.cal_start, group.cal_end, members.length).flights || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-3 px-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold text-center transition-all"
+                      >
+                        ✈️ Voos
+                      </a>
+                      <a
+                        href={getBookingUrls(filteredDestScores[0].name, "Lisboa", group.cal_start, group.cal_end, members.length).hotels}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-3 px-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-semibold text-center transition-all"
+                      >
+                        🏨 Hotéis
+                      </a>
+                      <a
+                        href={getBookingUrls(filteredDestScores[0].name, "Lisboa", group.cal_start, group.cal_end, members.length).carRental}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-3 px-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold text-center transition-all"
+                      >
+                        🚗 Carros
+                      </a>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
@@ -773,10 +835,20 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
         {tab === "money" && (
           <div className="space-y-5 animate-fade-in">
             <div className="flex gap-2 justify-center">{[3,4,5].map((n) => (<button key={n} onClick={() => setNights(n)} className={`px-4 py-1.5 rounded-lg text-sm font-medium ${nights === n ? "bg-orange-500 text-white" : "bg-slate-700 text-slate-300"}`}>{n} noites</button>))}</div>
-            {destScores.slice(0, 3).map((dest, di) => { const withCity = uData.filter((u) => u.d.originCity); return (
+            {destScores.slice(0, 3).map((dest, di) => {
+              const withCity = uData.filter((u) => u.d.originCity);
+              const bookingUrls = getBookingUrls(dest.name, "Lisboa", group.cal_start, group.cal_end, members.length);
+              const avgFlightCost = withCity.length ? Math.round(withCity.reduce((sum, u) => {
+                const orig = origins.find((o) => o.id === u.d.originCity);
+                if (!orig) return sum;
+                return sum + flightCost(haversine(orig.lat, orig.lon, dest.lat, dest.lon));
+              }, 0) / withCity.length) : null;
+
+              return (
               <div key={dest.id} className="bg-slate-800/60 border border-slate-700/30 rounded-2xl overflow-hidden">
                 {dest.image_url && <img src={dest.image_url} alt="" className="w-full h-24 object-cover" />}
-                <div className="p-4"><h3 className="font-bold mb-3">{dest.flag} {dest.name} <span className="text-slate-400 font-normal text-sm">— #{di+1}</span></h3>
+                <div className="p-4">
+                  <h3 className="font-bold mb-3">{dest.flag} {dest.name} <span className="text-slate-400 font-normal text-sm">— #{di+1}</span></h3>
                   <div className="space-y-2">
                     {withCity.map((u) => { const orig = origins.find((o) => o.id === u.d.originCity); if (!orig) return null;
                       const dist = haversine(orig.lat, orig.lon, dest.lat, dest.lon); const fl = Math.round(flightCost(dist));
@@ -789,7 +861,39 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
                       <div><p className="text-emerald-400 font-bold">€{Math.round(Math.min(...tots))}</p><p className="text-[10px] text-slate-500">Min</p></div>
                       <div><p className="text-orange-400 font-bold">€{Math.round(tots.reduce((a,b) => a+b, 0) / tots.length)}</p><p className="text-[10px] text-slate-500">Média</p></div>
                       <div><p className="text-red-400 font-bold">€{Math.round(Math.max(...tots))}</p><p className="text-[10px] text-slate-500">Max</p></div></div>); })()}
-                </div></div>); })}
+
+                  {/* Booking Actions */}
+                  <div className="mt-4 pt-3 border-t border-slate-700/50">
+                    <p className="text-xs text-slate-400 mb-2">Reservar para {dest.name}:</p>
+                    <div className="flex gap-2">
+                      <a
+                        href={bookingUrls.flights || "#"}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-2 rounded-lg bg-blue-600/80 hover:bg-blue-500 text-white text-xs font-medium text-center transition-all"
+                      >
+                        ✈️ Voos {avgFlightCost && <span className="opacity-75">~€{avgFlightCost}</span>}
+                      </a>
+                      <a
+                        href={bookingUrls.hotels}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-2 rounded-lg bg-orange-600/80 hover:bg-orange-500 text-white text-xs font-medium text-center transition-all"
+                      >
+                        🏨 Hotéis <span className="opacity-75">~€{Math.round(dest.cost_med)}/n</span>
+                      </a>
+                      <a
+                        href={bookingUrls.carRental}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 py-2 px-2 rounded-lg bg-emerald-600/80 hover:bg-emerald-500 text-white text-xs font-medium text-center transition-all"
+                      >
+                        🚗 Carros
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </div>); })}
             {destScores[0]?.gs <= 0 && <p className="text-slate-500 text-center">Completa o quiz para ver orçamentos.</p>}
             <p className="text-xs text-slate-500 text-center">💡 Estimativas: voo por distância, hotel médio, comida + 15% extras</p>
           </div>
