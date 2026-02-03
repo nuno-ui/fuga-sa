@@ -367,11 +367,135 @@ function Wizard({ memberId, members, allData, appData, calDates, onSave, onBack 
 // DASHBOARD
 // ═══════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════
+// DESTINATION DETAIL MODAL
+// ═══════════════════════════════════════════════
+
+function DestinationDetail({ dest, rank, factors, origins, members, allData, group, nights, onClose, onCompare, isInCompare }: any) {
+  const topAttrs = Object.entries(dest.attrs).sort(([,a],[,b]) => (b as number) - (a as number)).slice(0, 5);
+  const uData = members.map((m: Member) => ({ ...m, d: allData[m.id] || {} })).filter((u: any) => u.d.originCity);
+
+  // Calculate costs
+  const costs = uData.map((u: any) => {
+    const orig = origins.find((o: Origin) => o.id === u.d.originCity);
+    if (!orig) return null;
+    const dist = haversine(orig.lat, orig.lon, dest.lat, dest.lon);
+    const fl = flightCost(dist);
+    const ht = dest.cost_med * nights;
+    const fd = dest.food_per_day * (nights + 1);
+    return { member: u, flight: fl, hotel: ht, food: fd, total: fl + ht + fd + (fl + ht + fd) * 0.15 };
+  }).filter(Boolean);
+
+  const avgCost = costs.length ? Math.round(costs.reduce((a: number, b: any) => a + b.total, 0) / costs.length) : null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center">
+      <div className="bg-slate-900 w-full max-w-lg max-h-[90vh] rounded-t-3xl sm:rounded-3xl overflow-hidden animate-slide-up">
+        {/* Header Image */}
+        <div className="relative h-48">
+          {dest.image_url ? (
+            <img src={dest.image_url} alt={dest.name} className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full bg-slate-800 flex items-center justify-center text-6xl">{dest.flag}</div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent" />
+          <button onClick={onClose} className="absolute top-4 right-4 w-10 h-10 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70">✕</button>
+          <div className="absolute bottom-4 left-4 right-4">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl font-black text-orange-400">#{rank}</span>
+              <div>
+                <h2 className="text-2xl font-bold text-white">{dest.flag} {dest.name}</h2>
+                <p className="text-slate-300">{dest.country}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-12rem)]">
+          {/* Score & Consensus */}
+          <div className="flex gap-3">
+            <div className="flex-1 bg-slate-800/80 rounded-2xl p-4 text-center">
+              <p className="text-3xl font-black text-orange-400">{dest.gs.toFixed(1)}</p>
+              <p className="text-xs text-slate-400 mt-1">Match Score</p>
+            </div>
+            <div className="flex-1 bg-slate-800/80 rounded-2xl p-4 text-center">
+              <p className={`text-3xl font-black ${dest.consensus >= 80 ? "text-emerald-400" : dest.consensus >= 50 ? "text-amber-400" : "text-red-400"}`}>
+                {dest.consensus}%
+              </p>
+              <p className="text-xs text-slate-400 mt-1">Consenso</p>
+            </div>
+            {avgCost && (
+              <div className="flex-1 bg-slate-800/80 rounded-2xl p-4 text-center">
+                <p className="text-3xl font-black text-white">€{avgCost}</p>
+                <p className="text-xs text-slate-400 mt-1">Custo Médio</p>
+              </div>
+            )}
+          </div>
+
+          {/* Description */}
+          <p className="text-slate-300 text-sm">{dest.description}</p>
+
+          {/* Quick Info */}
+          <div className="flex gap-4 text-sm text-slate-400">
+            <span>🌡️ {dest.temp_may}°C</span>
+            <span>🌧️ {dest.rain_days} dias chuva</span>
+            <span>{"€".repeat(Math.min(Math.max(Math.ceil(dest.cost_med / 35), 1), 4))}</span>
+          </div>
+
+          {/* Attributes */}
+          <div className="bg-slate-800/60 rounded-2xl p-4">
+            <h3 className="font-semibold text-sm text-slate-300 mb-3">Pontos Fortes</h3>
+            <div className="space-y-2">
+              {topAttrs.map(([key, value]) => {
+                const factor = factors.find((f: Factor) => f.attr_key === key);
+                if (!factor) return null;
+                return (
+                  <div key={key} className="flex items-center gap-3">
+                    <span className="text-lg">{factor.emoji}</span>
+                    <span className="flex-1 text-sm text-slate-300">{factor.name}</span>
+                    <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-orange-500 to-pink-500" style={{ width: `${(value as number) * 100}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => onCompare(dest.id)}
+              className={`flex-1 py-3 rounded-xl font-semibold transition-all ${isInCompare ? "bg-blue-500 text-white" : "bg-slate-700 text-slate-300 hover:bg-slate-600"}`}
+            >
+              {isInCompare ? "✓ A comparar" : "Comparar"}
+            </button>
+          </div>
+
+          {/* Booking Links - Only show for top destination */}
+          {rank === 1 && (
+            <BookingLinks
+              destination={dest}
+              origins={origins}
+              calStart={group.cal_start}
+              calEnd={group.cal_end}
+              memberCount={members.length}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Dashboard({ group, members, allData, appData, calDates, onBack }: { group: Group; members: Member[]; allData: Record<string, any>; appData: AppData; calDates: string[]; onBack: () => void }) {
   const [tab, setTab] = useState("who"); const [nights, setNights] = useState(4);
+  const [whereSubTab, setWhereSubTab] = useState<"ranking" | "insights">("ranking");
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [showCompare, setShowCompare] = useState(false);
+  const [selectedDest, setSelectedDest] = useState<any>(null);
   const { destinations, factors, origins } = appData;
   const uData = members.map((m) => ({ ...m, d: allData[m.id] || {} }));
 
@@ -380,7 +504,6 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
     return destinations.map((dest) => {
       const scores = wd.map((u) => calcScore(u.d, dest, factors));
       const avg = scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-      // Calculate consensus (agreement percentage)
       let consensus = 100;
       if (scores.length > 1) {
         const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
@@ -392,7 +515,6 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
     }).sort((a, b) => b.gs - a.gs);
   }, [allData, destinations, factors]);
 
-  // Apply filters to destination scores
   const filteredDestScores = useMemo(() => {
     return applyFilters(destScores, filters).sort((a: any, b: any) => b.gs - a.gs);
   }, [destScores, filters]);
@@ -406,7 +528,6 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
   const bw = useMemo(() => bestWindows(allData, calDates, nights), [allData, calDates, nights]);
   const tabs = [{ id: "who", l: "👥 Quem" }, { id: "when", l: "📅 Quando" }, { id: "where", l: "📍 Onde" }, { id: "money", l: "💰 Quanto" }];
 
-  // Toggle compare selection
   const toggleCompare = (destId: string) => {
     setCompareIds((prev) => {
       if (prev.includes(destId)) return prev.filter((id) => id !== destId);
@@ -415,7 +536,6 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
     });
   };
 
-  // Get destinations for comparison
   const compareDestinations = useMemo(() => {
     return compareIds.map((id) => destScores.find((d) => d.id === id)).filter(Boolean) as (Destination & { gs: number })[];
   }, [compareIds, destScores]);
@@ -472,81 +592,169 @@ function Dashboard({ group, members, allData, appData, calDates, onBack }: { gro
 
         {tab === "where" && (
           <div className="space-y-3 animate-fade-in">
-            {/* Destination Filters */}
-            <DestinationFilters
-              filters={filters}
-              onChange={setFilters}
-              destinations={destinations}
-              filteredCount={filteredDestScores.length}
-            />
-
-            {/* Compare Button */}
-            {compareIds.length >= 2 && (
+            {/* Sub-tabs for Where */}
+            <div className="flex gap-1 bg-slate-800/40 rounded-xl p-1">
               <button
-                onClick={() => setShowCompare(true)}
-                className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-bold shadow-lg shadow-blue-500/25 transition-all hover:scale-[1.02] active:scale-95"
+                onClick={() => setWhereSubTab("ranking")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${whereSubTab === "ranking" ? "bg-slate-700 text-white" : "text-slate-400"}`}
               >
-                📊 Comparar {compareIds.length} destinos
+                🏆 Ranking
               </button>
+              <button
+                onClick={() => setWhereSubTab("insights")}
+                className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${whereSubTab === "insights" ? "bg-slate-700 text-white" : "text-slate-400"}`}
+              >
+                📊 Análise
+              </button>
+            </div>
+
+            {/* RANKING SUB-TAB */}
+            {whereSubTab === "ranking" && (
+              <>
+                {/* Winner Card */}
+                {filteredDestScores[0]?.gs > 0 && (
+                  <button
+                    onClick={() => setSelectedDest({ dest: filteredDestScores[0], rank: 1 })}
+                    className="w-full bg-gradient-to-r from-orange-500/20 to-pink-500/20 border border-orange-500/30 rounded-2xl overflow-hidden text-left hover:from-orange-500/30 hover:to-pink-500/30 transition-all"
+                  >
+                    <div className="relative h-32">
+                      {filteredDestScores[0].image_url ? (
+                        <img src={filteredDestScores[0].image_url} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-slate-800 flex items-center justify-center text-5xl">{filteredDestScores[0].flag}</div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+                      <div className="absolute top-3 left-3 bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-lg">🏆 #1</div>
+                      <div className="absolute bottom-3 left-3 right-3">
+                        <h3 className="text-xl font-bold text-white">{filteredDestScores[0].flag} {filteredDestScores[0].name}</h3>
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-orange-400 font-bold">{filteredDestScores[0].gs.toFixed(1)} pts</span>
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${filteredDestScores[0].consensus >= 80 ? "bg-emerald-500/30 text-emerald-300" : filteredDestScores[0].consensus >= 50 ? "bg-amber-500/30 text-amber-300" : "bg-red-500/30 text-red-300"}`}>
+                            {filteredDestScores[0].consensus}% consenso
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                )}
+
+                {/* Rest of Rankings */}
+                {filteredDestScores[0]?.gs > 0 ? (
+                  <div className="space-y-2">
+                    {filteredDestScores.slice(1, 10).map((dest: any, i: number) => {
+                      const rank = i + 2;
+                      const mx = filteredDestScores[0]?.gs || 1;
+                      const pct = (dest.gs / mx) * 100;
+                      return (
+                        <button
+                          key={dest.id}
+                          onClick={() => setSelectedDest({ dest, rank })}
+                          className="w-full bg-slate-800/60 border border-slate-700/30 rounded-xl p-3 flex items-center gap-3 hover:bg-slate-800/80 transition-all text-left"
+                        >
+                          <span className="text-lg font-bold text-slate-400 w-7">#{rank}</span>
+                          <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0">
+                            {dest.image_url ? (
+                              <img src={dest.image_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-slate-700 flex items-center justify-center text-xl">{dest.flag}</div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-white truncate">{dest.name}</p>
+                            <p className="text-xs text-slate-400">{dest.country}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-orange-400">{dest.gs.toFixed(1)}</p>
+                            <div className="w-16 h-1.5 bg-slate-700 rounded-full mt-1">
+                              <div className="h-full bg-gradient-to-r from-orange-500 to-pink-500 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <div className="text-5xl mb-4">🗺️</div>
+                    <p className="text-slate-400">Completa o quiz e prioridades para ver o ranking.</p>
+                  </div>
+                )}
+              </>
             )}
 
-            {/* Booking Links for top destination */}
-            {filteredDestScores[0]?.gs > 0 && (
-              <BookingLinks
-                destination={filteredDestScores[0] as any}
-                secondDestination={filteredDestScores[1] as any}
-                origins={origins}
-                calStart={group.cal_start}
-                calEnd={group.cal_end}
-                memberCount={members.length}
-              />
-            )}
+            {/* INSIGHTS SUB-TAB */}
+            {whereSubTab === "insights" && (
+              <>
+                {/* Filters */}
+                <DestinationFilters
+                  filters={filters}
+                  onChange={setFilters}
+                  destinations={destinations}
+                  filteredCount={filteredDestScores.length}
+                />
 
-            {/* Cost-Benefit Panel */}
-            {filteredDestScores[0]?.gs > 0 && (
-              <CostBenefitPanel
-                destinations={filteredDestScores.slice(0, 3) as any}
-                factors={factors}
-                members={members}
-                allData={allData}
-                origins={origins}
-                nights={nights}
-              />
-            )}
-
-            {filteredDestScores[0]?.gs > 0 ? filteredDestScores.slice(0, 10).map((dest: any, i: number) => {
-              const mx = filteredDestScores[0]?.gs || 1; const pct = (dest.gs / mx) * 100;
-              const topA = Object.entries(dest.attrs).sort(([,a],[,b]) => (b as number) - (a as number)).slice(0, 3).map(([k]) => factors.find((f) => f.attr_key === k)).filter(Boolean).map((f) => `${f!.emoji} ${f!.name}`).join(" · ");
-              const isSelected = compareIds.includes(dest.id);
-              return (<div key={dest.id} className={`bg-slate-800/60 border border-slate-700/30 rounded-2xl overflow-hidden ${i === 0 ? "ring-2 ring-orange-500/30" : ""} ${isSelected ? "ring-2 ring-blue-500/50" : ""}`}>
-                {dest.image_url && <img src={dest.image_url} alt="" className="w-full h-32 object-cover" />}
-                <div className="p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    {/* Compare Checkbox */}
+                {/* Compare Tool */}
+                <div className="bg-slate-800/60 border border-slate-700/30 rounded-2xl p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <span>📊</span> Comparar Destinos
+                  </h3>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {filteredDestScores.slice(0, 6).map((dest: any, i: number) => {
+                      const isSelected = compareIds.includes(dest.id);
+                      return (
+                        <button
+                          key={dest.id}
+                          onClick={() => toggleCompare(dest.id)}
+                          className={`px-3 py-1.5 rounded-lg text-sm transition-all ${isSelected ? "bg-blue-500 text-white" : "bg-slate-700/50 text-slate-300 hover:bg-slate-700"}`}
+                        >
+                          {dest.flag} {dest.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {compareIds.length >= 2 ? (
                     <button
-                      onClick={() => toggleCompare(dest.id)}
-                      className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${isSelected ? "bg-blue-500 border-blue-500 text-white" : "border-slate-600 hover:border-blue-400"}`}
+                      onClick={() => setShowCompare(true)}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 text-white font-semibold"
                     >
-                      {isSelected && "✓"}
+                      Comparar {compareIds.length} destinos →
                     </button>
-                    <span className="text-lg font-extrabold text-orange-400 w-8">#{i+1}</span><span className="text-xl">{dest.flag}</span>
-                    <div className="flex-1 min-w-0"><p className="font-bold truncate">{dest.name}</p><p className="text-xs text-slate-400">{dest.country} · {dest.category}</p></div>
-                    <span className="text-lg font-bold text-orange-400">{dest.gs.toFixed(1)}</span>
-                  </div>
-                  {/* Consensus Badge */}
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${dest.consensus >= 80 ? "bg-emerald-500/20 text-emerald-400" : dest.consensus >= 50 ? "bg-amber-500/20 text-amber-400" : "bg-red-500/20 text-red-400"}`}>
-                      🤝 {dest.consensus}% consenso
-                      {dest.consensus >= 80 && " ✅"}
-                      {dest.consensus < 50 && " ⚠️"}
-                    </span>
-                  </div>
-                  <div className="h-2 bg-slate-700 rounded-full mb-2"><div className="h-full bg-gradient-to-r from-orange-500 to-pink-500 rounded-full" style={{ width: `${pct}%` }} /></div>
-                  <p className="text-xs text-slate-400">{topA}</p><p className="text-xs text-slate-500 mt-1">🌡️ {dest.temp_may}°C · {dest.description}</p>
+                  ) : (
+                    <p className="text-xs text-slate-500 text-center">Seleciona pelo menos 2 destinos para comparar</p>
+                  )}
                 </div>
-              </div>); })
-            : <p className="text-slate-500 text-center py-8">Completa o quiz e prioridades para ver resultados.</p>}
+
+                {/* Cost-Benefit */}
+                {filteredDestScores[0]?.gs > 0 && (
+                  <CostBenefitPanel
+                    destinations={filteredDestScores.slice(0, 3) as any}
+                    factors={factors}
+                    members={members}
+                    allData={allData}
+                    origins={origins}
+                    nights={nights}
+                  />
+                )}
+              </>
+            )}
           </div>
+        )}
+
+        {/* Destination Detail Modal */}
+        {selectedDest && (
+          <DestinationDetail
+            dest={selectedDest.dest}
+            rank={selectedDest.rank}
+            factors={factors}
+            origins={origins}
+            members={members}
+            allData={allData}
+            group={group}
+            nights={nights}
+            onClose={() => setSelectedDest(null)}
+            onCompare={toggleCompare}
+            isInCompare={compareIds.includes(selectedDest.dest.id)}
+          />
         )}
 
         {/* Compare Modal */}
