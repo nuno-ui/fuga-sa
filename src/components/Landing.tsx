@@ -40,6 +40,14 @@ export default function Landing() {
           <p className="text-slate-400 mt-3 text-lg">Planeia viagens épicas com amigos</p>
         </div>
 
+        {/* Create group CTA */}
+        <button
+          onClick={() => router.push("/create")}
+          className="w-full mb-6 py-4 rounded-2xl bg-gradient-to-r from-orange-500 to-pink-500 text-white font-bold text-lg shadow-lg shadow-orange-500/25 hover:opacity-90 transition-all active:scale-[0.98]"
+        >
+          + Criar Novo Grupo
+        </button>
+
         {/* Enter code */}
         <div className="bg-slate-800/60 border border-slate-700/30 rounded-2xl p-6 mb-8">
           <p className="text-sm text-slate-400 mb-3">Tens um código de grupo?</p>
@@ -56,7 +64,7 @@ export default function Landing() {
               disabled={!code.trim()}
               className="px-6 rounded-xl bg-orange-500 text-white font-bold hover:bg-orange-600 transition-all disabled:opacity-40"
             >
-              Entrar →
+              Entrar
             </button>
           </div>
         </div>

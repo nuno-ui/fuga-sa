@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   loadGroup, loadMembers, loadMemberData, saveMemberData,
-  loadOrigins, loadDestinations, loadQuiz, loadFactors,
+  loadOrigins, loadDestinationsForGroup, loadQuizForGroup, loadFactorsForGroup,
   subscribeToMemberData, unsubscribe,
 } from "@/lib/supabase";
 import {
@@ -509,7 +509,11 @@ export default function FugaApp({ slug }: { slug: string }) {
       if (!group) { if (mounted) { setNotFound(true); setLoading(false); } return; }
 
       const [mems, dests, quiz, facts, origs] = await Promise.all([
-        loadMembers(group.id), loadDestinations(), loadQuiz(), loadFactors(), loadOrigins(),
+        loadMembers(group.id),
+        loadDestinationsForGroup(group.id),
+        loadQuizForGroup(group.id),
+        loadFactorsForGroup(group.id),
+        loadOrigins(),
       ]);
 
       const md = await loadMemberData(mems.map((m) => m.id));

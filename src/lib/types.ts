@@ -5,6 +5,33 @@ export interface Group {
   description: string | null;
   cal_start: string;
   cal_end: string;
+  admin_password?: string;
+  admin_email?: string;
+  is_public?: boolean;
+}
+
+export interface GroupDestination {
+  group_id: string;
+  destination_id: string;
+  priority: number;
+}
+
+export interface GroupFactor {
+  group_id: string;
+  factor_id: string;
+  display_order: number;
+}
+
+export interface GroupQuizQuestion {
+  group_id: string;
+  question_id: string;
+  display_order: number;
+}
+
+export interface GroupSelections {
+  destinations: string[];
+  factors: string[];
+  quizQuestions: string[];
 }
 
 export interface Member {
